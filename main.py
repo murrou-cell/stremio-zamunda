@@ -45,7 +45,7 @@ def get_manifest():
     return manifest
 
 @app.get("/{configuration}/manifest.json")
-def get_manifest(configuration: str):
+def get_manifest_with_config(configuration: str):
     newManifest = manifest.copy()
     newManifest.pop("behaviorHints")
     return newManifest
@@ -126,7 +126,7 @@ def get_stream(configuration:str, type: str, id: str):
             return cache[cacheKey]['data']
         
     if type == "movie":
-        title = omdb.get_movie_title(id,omdbKey)
+        title = omdb.get_title(id,omdbKey)
         if title is None:
             return {"error": "Could not find movie"}
         zamundaData = zamunda.search(title,username,password,True)
@@ -141,9 +141,11 @@ def get_stream(configuration:str, type: str, id: str):
     
     elif type == "series":
         imdbId,season,episode = id.split(":")
-        title = omdb.get_series_title(imdbId,season,episode,omdbKey)
+        title = omdb.get_title(imdbId,omdbKey)
         if title is None:
             return {"error": "Could not find series"}
+        # Build search title in format "Title S01E01"
+        title = f"{title} S{int(season):02d}E{int(episode):02d}"
         zamundaData = zamunda.search(title,username,password,True)
         if zamundaData is None:
             return {"error": "Could not find series"}
