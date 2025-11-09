@@ -62,7 +62,7 @@ def config_page():
                 const omdbKey = document.getElementById('omdb_key').value;
                 const username = document.getElementById('username').value;
                 const password = document.getElementById('password').value;
-                const bgAudio = document.getElementById('bg_audio').value;
+                const bgAudio = document.getElementById('bg_audio').checked ? "on" : "off";
 
                 // Create a configuration string
                 let configurationValue = [
@@ -120,7 +120,7 @@ def get_stream(configuration:str, type: str, id: str):
     if omdbKey is None or username is None or password is None:
         return {"error": "Invalid configuration"}
     else:
-        cacheKey = f"{omdbKey}-{username}-{password}-{type}-{id}"
+        cacheKey = f"{omdbKey}-{username}-{password}-{type}-{id}-{bgAudio}"
         if cacheKey in cache and cache[cacheKey]['timestamp'] > time.time() - 60*60:
             logger.info("Using cache")
             return cache[cacheKey]['data']
