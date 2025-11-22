@@ -35,27 +35,44 @@ def find_episode_in_files(torrent, season, episode):
     tag = f"S{int(season):02d}E{int(episode):02d}".lower()
     video_ext = (".mkv", ".mp4", ".avi", ".mov", ".flv")
 
-    for index, (filename, _) in enumerate(torrent["files"]):
+    for index, (filename, size) in enumerate(torrent["files"]):
         lower = filename.lower()
         if not lower.endswith(video_ext):
             continue
         if tag in lower:
-            return index
+            return index, size
     return None
 
-def buildStream(torrent,bgAudio, fileIdx = None):
+def buildStream(torrent,bgAudio, fileIdx = None, fileSize = None):
     torentIsBgAudio = torrent['bg_audio']
     if bgAudio and not torentIsBgAudio:
         return None
+    if fileSize is not None:
+        sizeString = f"💾{bytesToHumanReadable(fileSize)}/{torrent['size']}"
+    else:
+        sizeString = f"💾{torrent['size']}"
+
+    if fileIdx is not None: # bingeGroup
+        bingeGroup = f"zamunda-{'bg' if torrent['bg_audio'] else 'nonbg'}-binge"
+    else:
+        bingeGroup = f"zamunda-{'bg' if torrent['bg_audio'] else 'nonbg'}"
+
     result = {
-        "name": f"Zamunda.net\n {'🇧🇬🔊' if torrent['bg_audio'] else ''} 💾{torrent['size']} - 👤{torrent['seeders']}",
+        "name": f"Zamunda.net\n {'🇧🇬🔊' if torrent['bg_audio'] else ''} {sizeString} - 👤{torrent['seeders']}",
         "infoHash": torrent["infohash"],
         "description": f"{torrent['name']}",
-        "behaviorHints": {"bingeGroup": f"zamunda-{'bg' if torrent['bg_audio'] else 'nonbg'}"}
+        "behaviorHints": {"bingeGroup": bingeGroup}
     }
     if fileIdx is not None:
         result["fileIdx"] = fileIdx
     return result
+
+def bytesToHumanReadable(num):
+    for unit in ['B','KB','MB','GB','TB']:
+        if num < 1024.0:
+            return f"{num:.2f}{unit}"
+        num /= 1024.0
+    return f"{num:.2f}PB"
 
 app.add_middleware(
     CORSMiddleware,
@@ -223,9 +240,9 @@ def get_stream(configuration:str, type: str, id: str):
 
             # CASE B: сезонен пакет → трябва да намерим епизода вътре
             if is_full_season(name, season):
-                idx = find_episode_in_files(torrent, season, episode)
+                idx, size = find_episode_in_files(torrent, season, episode)
                 if idx is not None:
-                    s = buildStream(torrent, bgAudio, fileIdx=idx)
+                    s = buildStream(torrent, bgAudio, fileIdx=idx, fileSize=size)
                     if s:
                         streams.append(s)
                 continue
