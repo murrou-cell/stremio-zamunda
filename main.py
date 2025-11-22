@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from zamunda import Zamunda 
+from zamunda_api.zamunda import Zamunda 
 from manifest import manifest
 from omdb import Omdb
 from fastapi import FastAPI
