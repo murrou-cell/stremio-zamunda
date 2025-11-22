@@ -1,13 +1,14 @@
 import logging
 import threading
 import time
-from zamunda_api.zamunda import Zamunda 
+from zamunda import Zamunda 
 from manifest import manifest
 from omdb import Omdb
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from fastapi.responses import HTMLResponse
+import re
 logger = logging.getLogger("uvicorn")
 zamunda = Zamunda()
 omdb = Omdb(logger)
@@ -15,15 +16,46 @@ app = FastAPI()
 
 cache = {}
 
-def buildStream(torrent,bgAudio):
+def is_single_episode(name, season, episode):
+    tag = f"S{int(season):02d}E{int(episode):02d}".lower()
+    return tag in name.lower()
+
+def is_full_season(name, season):
+    s = int(season)
+    # хвърля True ако името съдържа S01 или Season 1
+    # но не съдържа S01E01, S01E02 и т.н.
+    if re.search(rf"\bS{s:02d}\b", name, re.IGNORECASE) or re.search(rf"\bSeason {s}\b", name, re.IGNORECASE):
+        # проверка за епизод, ако има → не е пълен сезон
+        if not re.search(r"S\d\dE\d\d", name, re.IGNORECASE):
+            return True
+    return False
+
+
+def find_episode_in_files(torrent, season, episode):
+    tag = f"S{int(season):02d}E{int(episode):02d}".lower()
+    video_ext = (".mkv", ".mp4", ".avi", ".mov", ".flv")
+
+    for index, (filename, _) in enumerate(torrent["files"]):
+        lower = filename.lower()
+        if not lower.endswith(video_ext):
+            continue
+        if tag in lower:
+            return index
+    return None
+
+def buildStream(torrent,bgAudio, fileIdx = None):
     torentIsBgAudio = torrent['bg_audio']
     if bgAudio and not torentIsBgAudio:
         return None
-    return {
+    result = {
         "name": f"Zamunda.net\n {'🇧🇬🔊' if torrent['bg_audio'] else ''} 💾{torrent['size']} - 👤{torrent['seeders']}",
         "infoHash": torrent["infohash"],
-        "description": f"{torrent['name']}"
+        "description": f"{torrent['name']}",
+        "behaviorHints": {"bingeGroup": f"zamunda-{'bg' if torrent['bg_audio'] else 'nonbg'}"}
     }
+    if fileIdx is not None:
+        result["fileIdx"] = fileIdx
+    return result
 
 app.add_middleware(
     CORSMiddleware,
@@ -144,14 +176,60 @@ def get_stream(configuration:str, type: str, id: str):
         title = omdb.get_title(imdbId,omdbKey)
         if title is None:
             return {"error": "Could not find series"}
-        # Build search title in format "Title S01E01"
-        title = f"{title} S{int(season):02d}E{int(episode):02d}"
-        zamundaData = zamunda.search(title,username,password,True)
-        if zamundaData is None:
-            return {"error": "Could not find series"}
+
+        # 1) Първо търсим конкретния епизод "S00E00" формат
+        search_title = f"{title} S{int(season):02d}E{int(episode):02d}"
+        zamundaData = zamunda.search(search_title, username, password, True)
+
+        # 2) После търсим и целия сезон по "S00" i "Season 0" формата
+        search_season = f"{title} S{int(season):02d}"
+        seasonData = zamunda.search(search_season, username, password, True)
+        search_season_alt = f"{title} Season {int(season)}"
+        seasonDataAlt = zamunda.search(search_season_alt, username, password, True)
+
+        # комбинираме резултатите без дублиране
+        allResults = []
+        seen = set()
+
+        for t in (zamundaData or []):
+            if t["infohash"] not in seen:
+                allResults.append(t)
+                seen.add(t["infohash"])
+
+        for t in (seasonData or []):
+            if t["infohash"] not in seen:
+                allResults.append(t)
+                seen.add(t["infohash"])
+
+        for t in (seasonDataAlt or []):
+            if t["infohash"] not in seen:
+                allResults.append(t)
+                seen.add(t["infohash"])
+
+        if not allResults:
+            return {"streams": []}
+
         streams = []
-        for torrent in zamundaData:
-            streams.append(streams.append(buildStream(torrent,bgAudio)))
+
+        for torrent in allResults:
+            name = torrent["name"]
+
+            # CASE A: единичен епизод
+            if is_single_episode(name, season, episode):
+                s = buildStream(torrent, bgAudio)
+                if s:
+                    streams.append(s)
+                continue
+
+            # CASE B: сезонен пакет → трябва да намерим епизода вътре
+            if is_full_season(name, season):
+                idx = find_episode_in_files(torrent, season, episode)
+                if idx is not None:
+                    s = buildStream(torrent, bgAudio, fileIdx=idx)
+                    if s:
+                        streams.append(s)
+                continue
+
         cache[cacheKey] = {"timestamp": time.time(), "data": {"streams": streams}}
         logger.info(f"Found {len(streams)} streams")
         return {"streams": streams}
