@@ -196,13 +196,13 @@ def get_stream(configuration:str, type: str, id: str):
 
         # 1) Първо търсим конкретния епизод "S00E00" формат
         search_title = f"{title} S{int(season):02d}E{int(episode):02d}"
-        zamundaData = zamunda.search(search_title, username, password, True)
+        zamundaData = zamunda.search(search_title, username, password, True, False)
 
         # 2) После търсим и целия сезон по "S00" i "Season 0" формата
         search_season = f"{title} S{int(season):02d}"
-        seasonData = zamunda.search(search_season, username, password, True)
+        seasonData = zamunda.search(search_season, username, password, True, True)
         search_season_alt = f"{title} Season {int(season)}"
-        seasonDataAlt = zamunda.search(search_season_alt, username, password, True)
+        seasonDataAlt = zamunda.search(search_season_alt, username, password, True, True)
 
         # комбинираме резултатите без дублиране
         allResults = []
