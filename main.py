@@ -41,26 +41,23 @@ def find_episode_in_files(torrent, season, episode):
             continue
         if tag in lower:
             return index, size
-    return None
+    return None, 0
 
 def buildStream(torrent,bgAudio, fileIdx = None, fileSize = None):
     torentIsBgAudio = torrent['bg_audio']
     if bgAudio and not torentIsBgAudio:
         return None
-    if fileSize is not None:
+    if fileSize is not None: # -> binge torrent
         sizeString = f"💾{bytesToHumanReadable(fileSize)}/{torrent['size']}"
+        bingeGroup = f"zamunda-{'bg' if torrent['bg_audio'] else 'nonbg'}-binge-{torrent['infohash']}"
     else:
         sizeString = f"💾{torrent['size']}"
-
-    if fileIdx is not None: # bingeGroup
-        bingeGroup = f"zamunda-{'bg' if torrent['bg_audio'] else 'nonbg'}-binge"
-    else:
         bingeGroup = f"zamunda-{'bg' if torrent['bg_audio'] else 'nonbg'}"
 
     result = {
-        "name": f"Zamunda.net\n {'🇧🇬🔊' if torrent['bg_audio'] else ''} {sizeString} - 👤{torrent['seeders']}",
+        "name": f"Zamunda.net\n {'🇧🇬🔊' if torrent['bg_audio'] else ''}",
         "infoHash": torrent["infohash"],
-        "description": f"{torrent['name']}",
+        "description": f"{torrent['name']}\n {sizeString} 👤{torrent['seeders']}",
         "behaviorHints": {"bingeGroup": bingeGroup}
     }
     if fileIdx is not None:
@@ -194,15 +191,11 @@ def get_stream(configuration:str, type: str, id: str):
         if title is None:
             return {"error": "Could not find series"}
 
-        # 1) Първо търсим конкретния епизод "S00E00" формат
         search_title = f"{title} S{int(season):02d}E{int(episode):02d}"
-        zamundaData = zamunda.search(search_title, username, password, True, False)
-
-        # 2) После търсим и целия сезон по "S00" i "Season 0" формата
         search_season = f"{title} S{int(season):02d}"
-        seasonData = zamunda.search(search_season, username, password, True, True)
         search_season_alt = f"{title} Season {int(season)}"
-        seasonDataAlt = zamunda.search(search_season_alt, username, password, True, True)
+
+        zamundaData = zamunda.search_multi([search_title, search_season, search_season_alt], username, password, provide_infohash=True, provide_files=True)
 
         # комбинираме резултатите без дублиране
         allResults = []
@@ -213,19 +206,10 @@ def get_stream(configuration:str, type: str, id: str):
                 allResults.append(t)
                 seen.add(t["infohash"])
 
-        for t in (seasonData or []):
-            if t["infohash"] not in seen:
-                allResults.append(t)
-                seen.add(t["infohash"])
-
-        for t in (seasonDataAlt or []):
-            if t["infohash"] not in seen:
-                allResults.append(t)
-                seen.add(t["infohash"])
-
         if not allResults:
             return {"streams": []}
 
+        allResults = sorted(allResults, key=lambda t:int(t['seeders']), reverse=True)
         streams = []
 
         for torrent in allResults:
