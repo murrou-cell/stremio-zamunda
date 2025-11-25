@@ -22,11 +22,18 @@ def is_single_episode(name, season, episode):
 
 def is_full_season(name, season):
     s = int(season)
-    # хвърля True ако името съдържа S01 или Season 1
-    # но не съдържа S01E01, S01E02 и т.н.
-    if re.search(rf"\bS{s:02d}\b", name, re.IGNORECASE) or re.search(rf"\bSeason {s}\b", name, re.IGNORECASE):
-        # проверка за епизод, ако има → не е пълен сезон
-        if not re.search(r"S\d\dE\d\d", name, re.IGNORECASE):
+
+    # S04 ili S4
+    re_s = rf"\bS0?{s}\b"
+
+    # Season 04 ili Season 4
+    re_season = rf"\bSeason 0?{s}\b"
+
+    # Episodi – ako gi ima, ne e pulen sezon
+    re_episode = r"S\d{1,2}E\d{1,2}"
+
+    if re.search(re_s, name, re.IGNORECASE) or re.search(re_season, name, re.IGNORECASE):
+        if not re.search(re_episode, name, re.IGNORECASE):
             return True
     return False
 
